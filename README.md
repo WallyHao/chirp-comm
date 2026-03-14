@@ -19,8 +19,8 @@
 ## 安装
 
 ```bash
-git clone <repo_url>
-cd communicate-chirp
+git clone https://github.com/waliwuao/chirp_comm.git
+cd chirp_comm
 pip install -r requirements.txt
 pip install -e .
 ```
@@ -142,8 +142,8 @@ receiver.stop()
 ## 项目结构
 
 ```text
-communicate-chirp/
-├── chirp_comm/
+chirp_comm/          # 克隆后的仓库根目录
+├── chirp_comm/      # Python 包
 │   ├── __init__.py    # 导出 ChirpSender, ChirpReceiver
 │   ├── config.py      # 物理层参数（FS, 频率, 时长, FEC 块长等）
 │   ├── dsp.py         # chirp 生成（Hanning 窗）、Hamming(7,4) 编解码、payload 生成
