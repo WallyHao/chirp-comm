@@ -1,20 +1,30 @@
 import threading
-import queue
+
 import numpy as np
-import sounddevice as sd
-from scipy.signal import correlate
-from .config import FS, PAUSE, BIT_TOTAL_SAMPLES, TOTAL_EXPECTED_BITS, DATA_LEN_CHARS, SYNC_THRESHOLD_RATIO, BIT_ENERGY_THRESHOLD_RATIO
-from .dsp import REF_SYNC, REF_UP, REF_DOWN, apply_bandpass
-from .protocol import ChirpProtocol
-from .packet import AcousticPacket
+
 from .audio_io import AsyncInputStream
+from .config import (
+    BIT_ENERGY_THRESHOLD_RATIO,
+    BIT_TOTAL_SAMPLES,
+    DATA_LEN_CHARS,
+    FS,
+    PAUSE,
+    SYNC_THRESHOLD_RATIO,
+    TOTAL_EXPECTED_BITS,
+)
+from .dsp import REF_DOWN, REF_SYNC, REF_UP
+from .packet import AcousticPacket
+from .protocol import ChirpProtocol
+
 
 class Transmitter:
     def __init__(self, device=None):
         self.device = device
 
     def send(self, text):
-        chunks = [text[i:i+DATA_LEN_CHARS] for i in range(0, max(1, len(text)), DATA_LEN_CHARS)]
+        import sounddevice as sd
+
+        chunks = [text[i : i + DATA_LEN_CHARS] for i in range(0, max(1, len(text)), DATA_LEN_CHARS)]
         if not chunks:
             chunks = ["  "]
         for chunk in chunks:
@@ -28,6 +38,7 @@ class Transmitter:
             payload = np.concatenate(audio).astype(np.float32)
             sd.play(payload, samplerate=FS, device=self.device)
             sd.wait()
+
 
 class Listener:
     def __init__(self, device=None):
@@ -46,8 +57,8 @@ class Listener:
         """更新噪声基准"""
         self.noise_samples.extend(np.abs(data).tolist())
         if len(self.noise_samples) > FS * 2:
-            self.noise_floor = np.median(self.noise_samples[-int(FS * 2):])
-            self.noise_samples = self.noise_samples[-int(FS):]
+            self.noise_floor = np.median(self.noise_samples[-int(FS * 2) :])
+            self.noise_samples = self.noise_samples[-int(FS) :]
 
     def _get_sync_threshold(self):
         """获取同步检测阈值"""
@@ -61,13 +72,15 @@ class Listener:
         with self.lock:
             self.buffer = np.append(self.buffer, data)
             if len(self.buffer) > FS * 10:
-                self.buffer = self.buffer[-int(FS * 10):]
+                self.buffer = self.buffer[-int(FS * 10) :]
             self._update_noise_floor(data)
             self._process()
 
     def _find_sync(self, search_window):
         """在搜索窗口中查找同步信号"""
-        corr = correlate(search_window, REF_SYNC, mode='valid')
+        from scipy.signal import correlate
+
+        corr = correlate(search_window, REF_SYNC, mode="valid")
         threshold = self._get_sync_threshold()
         max_val = np.max(corr)
         if max_val > threshold:
@@ -76,6 +89,8 @@ class Listener:
 
     def _get_bit(self, segment):
         """检测单个bit"""
+        from scipy.signal import correlate
+
         if len(segment) < len(REF_UP):
             return None
 
@@ -103,7 +118,7 @@ class Listener:
             sync_pos, sync_val = self._find_sync(self.buffer[:search_len])
 
             if sync_pos is None:
-                self.buffer = self.buffer[int(FS * 0.5):]
+                self.buffer = self.buffer[int(FS * 0.5) :]
                 continue
 
             # 检查是否有足够的数据来解码完整数据包
@@ -139,7 +154,7 @@ class Listener:
                     h(packet)
                 self.buffer = self.buffer[curr_ptr:]
             else:
-                self.buffer = self.buffer[sync_pos + len(REF_SYNC):]
+                self.buffer = self.buffer[sync_pos + len(REF_SYNC) :]
 
     def start(self):
         self.stream.start()

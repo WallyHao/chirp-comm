@@ -1,5 +1,3 @@
-import sounddevice as sd
-
 class AsyncInputStream:
     def __init__(self, fs, callback, device=None):
         self.fs = fs
@@ -8,11 +6,10 @@ class AsyncInputStream:
         self.stream = None
 
     def start(self):
+        import sounddevice as sd
+
         self.stream = sd.InputStream(
-            samplerate=self.fs,
-            device=self.device,
-            channels=1,
-            callback=self._internal_callback
+            samplerate=self.fs, device=self.device, channels=1, callback=self._internal_callback
         )
         self.stream.start()
 
