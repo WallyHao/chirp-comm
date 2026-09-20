@@ -1,25 +1,35 @@
 #!/usr/bin/env python3
 """
-Generate chirp audio samples for testing
+Generate chirp audio samples for testing.
 
 Usage:
     python generate_to_file.py              # Generate all samples
     python generate_to_file.py --clean      # Generate clean signal only
-    python generate_to_file.py --noisy      # Generate noisy samples
-    python generate_to_file.py --distorted  # Generate distorted samples
+    python generate_to_file.py --seed 42    # Reproducible interference
 """
 
 import argparse
 import os
+import wave
 
 import numpy as np
-import scipy.io.wavfile as wav
 
 from chirp_comm.config import FS, PAUSE
 from chirp_comm.dsp import REF_DOWN, REF_SYNC, REF_UP
 from chirp_comm.protocol import ChirpProtocol
 
 SAMPLES_DIR = "samples"
+
+
+def write_wav(path, audio, fs=FS):
+    """Write a mono 16-bit PCM WAV file using only the standard library."""
+    samples = np.clip(audio, -1.0, 1.0)
+    pcm = (samples * 32767.0).astype("<i2")
+    with wave.open(path, "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(fs)
+        handle.writeframes(pcm.tobytes())
 
 
 def generate_clean_signal(text="ab", duration_before=0.5, duration_after=0.5):
@@ -45,16 +55,22 @@ def add_gaussian_noise(audio, snr_db=10):
 
 
 def add_pink_noise(audio, snr_db=10):
-    """Add pink noise (1/f noise)"""
+    """Add pink (1/f) noise shaped in the frequency domain.
+
+    The amplitude spectrum is scaled by 1/sqrt(f), which makes the power
+    spectrum fall off as 1/f. A cumulative sum of white noise would instead
+    produce Brownian (1/f^2) noise.
+    """
     signal_power = np.mean(audio**2)
     noise_power = signal_power / (10 ** (snr_db / 10))
 
-    # Generate pink noise: white noise through 1/f filter
-    white = np.random.normal(0, 1, len(audio))
-    # Simplified pink noise approximation
-    pink = np.cumsum(white)
-    pink = pink - np.mean(pink)
-    pink = pink / np.max(np.abs(pink)) * np.sqrt(noise_power)
+    n = len(audio)
+    spectrum = np.fft.rfft(np.random.normal(0, 1, n))
+    freqs = np.fft.rfftfreq(n)
+    shape = np.ones_like(freqs)
+    shape[1:] = 1.0 / np.sqrt(freqs[1:])
+    pink = np.fft.irfft(spectrum * shape, n=n)
+    pink = pink / np.sqrt(np.mean(pink**2)) * np.sqrt(noise_power)
     return audio + pink
 
 
@@ -96,10 +112,20 @@ def apply_volume(audio, factor):
     return audio * factor
 
 
-def apply_doppler_shift(audio, shift_hz=100):
-    """Apply Doppler frequency shift"""
-    t = np.arange(len(audio)) / FS
-    return audio * np.sin(2 * np.pi * shift_hz * t)
+def apply_doppler_shift(audio, shift_hz=100, reference_hz=3000.0):
+    """Apply a Doppler shift by time-scaling the whole signal.
+
+    Doppler scales every frequency by the same factor, so a shift of
+    ``shift_hz`` measured at ``reference_hz`` is modelled by resampling the
+    signal by ``1 + shift_hz / reference_hz``. Positive shifts compress the
+    signal and raise its frequencies; negative shifts stretch it. Ring
+    modulating with a sine would only create sidebands, not a shift.
+    """
+    factor = 1.0 + shift_hz / reference_hz
+    n = len(audio)
+    out_len = int(np.floor((n - 1) / factor)) + 1
+    source = np.arange(out_len) * factor
+    return np.interp(source, np.arange(n), audio).astype(np.float32)
 
 
 def add_reverb(audio, decay=0.3, delay=0.1):
@@ -123,73 +149,71 @@ def add_clicks(audio, n_clicks=10):
     return result
 
 
-def generate_all_samples(text="ab"):
+def generate_all_samples(text="ab", seed=0):
     """Generate all test samples"""
+    np.random.seed(seed)
     os.makedirs(SAMPLES_DIR, exist_ok=True)
 
     # Clean signal
     clean = generate_clean_signal(text)
-    wav.write(f"{SAMPLES_DIR}/01_clean.wav", FS, clean)
+    write_wav(f"{SAMPLES_DIR}/01_clean.wav", clean)
     print("  [OK] 01_clean.wav - Clean signal")
 
     # Different SNR Gaussian noise
     for snr in [20, 15, 10, 5]:
         noisy = add_gaussian_noise(clean, snr_db=snr)
-        wav.write(f"{SAMPLES_DIR}/02_gaussian_snr{snr}.wav", FS, np.clip(noisy, -1, 1))
+        write_wav(f"{SAMPLES_DIR}/02_gaussian_snr{snr}.wav", noisy)
         print(f"  [OK] 02_gaussian_snr{snr}.wav - Gaussian noise SNR={snr}dB")
 
     # Pink noise
     pink = add_pink_noise(clean, snr_db=10)
-    wav.write(f"{SAMPLES_DIR}/03_pink_noise.wav", FS, np.clip(pink, -1, 1))
+    write_wav(f"{SAMPLES_DIR}/03_pink_noise.wav", pink)
     print("  [OK] 03_pink_noise.wav - Pink noise")
 
     # AC hum
     for freq in [50, 100]:
         hum = add_hum(clean, snr_db=15, freq=freq)
-        wav.write(f"{SAMPLES_DIR}/04_hum_{freq}hz.wav", FS, np.clip(hum, -1, 1))
+        write_wav(f"{SAMPLES_DIR}/04_hum_{freq}hz.wav", hum)
         print(f"  [OK] 04_hum_{freq}hz.wav - {freq}Hz hum interference")
 
     # Burst noise
     burst = add_burst_noise(clean, n_bursts=5)
-    wav.write(f"{SAMPLES_DIR}/05_burst_noise.wav", FS, np.clip(burst, -1, 1))
+    write_wav(f"{SAMPLES_DIR}/05_burst_noise.wav", burst)
     print("  [OK] 05_burst_noise.wav - Burst noise")
 
     # Signal dropout
     dropout = add_dropout(clean, n_dropouts=2)
-    wav.write(f"{SAMPLES_DIR}/06_dropout.wav", FS, dropout)
+    write_wav(f"{SAMPLES_DIR}/06_dropout.wav", dropout)
     print("  [OK] 06_dropout.wav - Signal dropout")
 
     # Volume attenuation
     for factor in [0.5, 0.3, 0.1]:
         vol = apply_volume(clean, factor)
-        wav.write(f"{SAMPLES_DIR}/07_volume_{int(factor * 100)}.wav", FS, vol)
+        write_wav(f"{SAMPLES_DIR}/07_volume_{int(factor * 100)}.wav", vol)
         print(f"  [OK] 07_volume_{int(factor * 100)}.wav - Volume {int(factor * 100)}%")
 
     # Doppler frequency shift
     for shift in [50, -50, 200]:
         doppler = apply_doppler_shift(clean, shift_hz=shift)
-        wav.write(
-            f"{SAMPLES_DIR}/08_doppler_{'+' if shift > 0 else ''}{shift}hz.wav",
-            FS,
-            np.clip(doppler, -1, 1),
-        )
-        print(f"  [OK] 08_doppler_{'+' if shift > 0 else ''}{shift}hz.wav - Freq shift {shift}Hz")
+        sign = "+" if shift >= 0 else ""
+        write_wav(f"{SAMPLES_DIR}/08_doppler_{sign}{shift}hz.wav", doppler)
+        print(f"  [OK] 08_doppler_{sign}{shift}hz.wav - Freq shift {shift}Hz")
 
     # Reverb
     reverb = add_reverb(clean, decay=0.3, delay=0.05)
-    wav.write(f"{SAMPLES_DIR}/09_reverb.wav", FS, np.clip(reverb, -1, 1))
+    write_wav(f"{SAMPLES_DIR}/09_reverb.wav", reverb)
     print("  [OK] 09_reverb.wav - Reverb effect")
 
     # Impulse noise
     clicks = add_clicks(clean, n_clicks=10)
-    wav.write(f"{SAMPLES_DIR}/10_clicks.wav", FS, np.clip(clicks, -1, 1))
+    write_wav(f"{SAMPLES_DIR}/10_clicks.wav", clicks)
     print("  [OK] 10_clicks.wav - Impulse noise")
 
     # Combined interference
     combined = add_gaussian_noise(clean, snr_db=15)
     combined = add_hum(combined, snr_db=20, freq=50)
     combined = add_burst_noise(combined, n_bursts=3)
-    wav.write(f"{SAMPLES_DIR}/11_combined.wav", FS, np.clip(combined, -1, 1))
+    write_wav(f"{SAMPLES_DIR}/11_combined.wav", combined)
     print("  [OK] 11_combined.wav - Combined interference")
 
     print(f"\nAll samples saved to {SAMPLES_DIR}/")
@@ -200,21 +224,16 @@ def main():
     parser = argparse.ArgumentParser(description="Generate chirp test samples")
     parser.add_argument("--text", "-t", default="ab", help="Text to encode")
     parser.add_argument("--clean", action="store_true", help="Generate clean signal only")
-    parser.add_argument("--noisy", action="store_true", help="Generate noisy samples")
-    parser.add_argument("--distorted", action="store_true", help="Generate distorted samples")
+    parser.add_argument("--seed", type=int, default=0, help="Random seed for reproducibility")
     args = parser.parse_args()
 
     if args.clean:
         os.makedirs(SAMPLES_DIR, exist_ok=True)
         clean = generate_clean_signal(args.text)
-        wav.write(f"{SAMPLES_DIR}/clean.wav", FS, clean)
+        write_wav(f"{SAMPLES_DIR}/clean.wav", clean)
         print(f"Generated clean signal: {SAMPLES_DIR}/clean.wav")
-    elif args.noisy:
-        generate_all_samples(args.text)
-    elif args.distorted:
-        generate_all_samples(args.text)
     else:
-        generate_all_samples(args.text)
+        generate_all_samples(args.text, seed=args.seed)
 
 
 if __name__ == "__main__":
