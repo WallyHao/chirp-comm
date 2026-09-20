@@ -27,3 +27,21 @@ def test_text_is_truncated_to_payload_length():
 
 def test_short_stream_is_rejected():
     assert ChirpProtocol.decode_from_bits("0101") == "???"
+
+
+def test_crc8_matches_reference_check_value():
+    data = "".join(format(byte, "08b") for byte in b"123456789")
+    assert ChirpProtocol._crc8(data) == format(0xF4, "08b")
+
+
+def test_single_bit_error_is_corrected():
+    bits = list(ChirpProtocol.encode_to_bits("ab"))
+    bits[0] = "1" if bits[0] == "0" else "0"
+    assert ChirpProtocol.decode_from_bits("".join(bits)) == "ab"
+
+
+def test_double_bit_error_is_detected():
+    bits = list(ChirpProtocol.encode_to_bits("ab"))
+    bits[0] = "1" if bits[0] == "0" else "0"
+    bits[1] = "1" if bits[1] == "0" else "0"
+    assert ChirpProtocol.decode_from_bits("".join(bits)) == "!!!"
