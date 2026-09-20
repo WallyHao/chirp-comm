@@ -7,11 +7,14 @@ Usage:
     python transmit_live.py "HELLO"     # Transmit custom message
     python transmit_live.py --loop      # Loop transmission
 """
+
 import argparse
+
 import numpy as np
 import sounddevice as sd
+
 from chirp_comm.config import FS, PAUSE
-from chirp_comm.dsp import REF_SYNC, REF_UP, REF_DOWN
+from chirp_comm.dsp import REF_DOWN, REF_SYNC, REF_UP
 from chirp_comm.protocol import ChirpProtocol
 
 
@@ -19,11 +22,7 @@ def generate_audio(text):
     """Generate chirp audio"""
     bits = ChirpProtocol.encode_to_bits(text)
 
-    audio = [
-        np.zeros(int(FS * 0.5)),
-        REF_SYNC,
-        np.zeros(int(FS * 0.1))
-    ]
+    audio = [np.zeros(int(FS * 0.5)), REF_SYNC, np.zeros(int(FS * 0.1))]
 
     for bit in bits:
         audio.append(REF_UP if bit == "1" else REF_DOWN)

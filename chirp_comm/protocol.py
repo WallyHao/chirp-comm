@@ -1,5 +1,6 @@
-from .dsp import hamming_74_encode, hamming_74_decode
-from .config import DATA_LEN_CHARS, BITS_PER_BLOCK, BLOCKS_PER_CHAR, TOTAL_EXPECTED_BITS
+from .config import DATA_LEN_CHARS, TOTAL_EXPECTED_BITS
+from .dsp import hamming_74_decode, hamming_74_encode
+
 
 class ChirpProtocol:
     @staticmethod
@@ -10,12 +11,12 @@ class ChirpProtocol:
             crc = ((crc << 1) | int(bit)) & 0xFF
             if crc & 0x100:
                 crc ^= 0x07
-        return format(crc, '08b')
+        return format(crc, "08b")
 
     @staticmethod
     def encode_to_bits(text):
         """编码文本为位流"""
-        text = text[:DATA_LEN_CHARS].ljust(DATA_LEN_CHARS, ' ')
+        text = text[:DATA_LEN_CHARS].ljust(DATA_LEN_CHARS, " ")
 
         # 1. 原始数据位
         raw_bits = ""
@@ -25,14 +26,14 @@ class ChirpProtocol:
         # 2. 用 Hamming(7,4) 编码每个 nibble
         encoded = ""
         for i in range(0, len(raw_bits), 4):
-            nibble = raw_bits[i:i+4]
+            nibble = raw_bits[i : i + 4]
             if len(nibble) == 4:
                 encoded += hamming_74_encode(nibble)
 
         # 3. 添加奇偶校验位（每 7 位添加 1 位奇偶校验）
         encoded_with_parity = ""
         for i in range(0, len(encoded), 7):
-            block = encoded[i:i+7]
+            block = encoded[i : i + 7]
             if len(block) == 7:
                 parity = str(sum(int(b) for b in block) % 2)
                 encoded_with_parity += block + parity
@@ -58,8 +59,8 @@ class ChirpProtocol:
         i = 0
         while i < len(data_encoded):
             if i + 8 <= len(data_encoded):
-                block = data_encoded[i:i+7]
-                parity = data_encoded[i+7]
+                block = data_encoded[i : i + 7]
+                parity = data_encoded[i + 7]
                 block_parity = str(sum(int(b) for b in block) % 2)
 
                 if parity == block_parity:
@@ -79,11 +80,11 @@ class ChirpProtocol:
         # 转换为字符
         chars = []
         for i in range(0, len(raw_bits), 8):
-            byte_bits = raw_bits[i:i+8]
+            byte_bits = raw_bits[i : i + 8]
             if len(byte_bits) == 8:
                 byte_val = int(byte_bits, 2)
                 if 32 <= byte_val <= 126:
                     chars.append(chr(byte_val))
                 else:
-                    chars.append('?')
+                    chars.append("?")
         return "".join(chars)

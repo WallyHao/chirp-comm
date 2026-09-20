@@ -8,11 +8,13 @@ This is a demo showing how to integrate chirp communication into real applicatio
 Usage:
     python automated_command_trigger.py
 """
-import sounddevice as sd
+
 import numpy as np
+import sounddevice as sd
 from scipy.signal import correlate
-from chirp_comm.config import FS, BIT_TOTAL_SAMPLES, TOTAL_EXPECTED_BITS
-from chirp_comm.dsp import REF_SYNC, REF_UP, REF_DOWN
+
+from chirp_comm.config import BIT_TOTAL_SAMPLES, FS, TOTAL_EXPECTED_BITS
+from chirp_comm.dsp import REF_DOWN, REF_SYNC, REF_UP
 from chirp_comm.protocol import ChirpProtocol
 
 
@@ -55,7 +57,7 @@ class SmartHomeController:
             return
 
         # Detect sync
-        corr = correlate(audio, REF_SYNC, mode='valid')
+        corr = correlate(audio, REF_SYNC, mode="valid")
         if len(corr) == 0 or np.max(corr) < 50:
             return
 
@@ -65,7 +67,7 @@ class SmartHomeController:
         curr_ptr = peak_idx + len(REF_SYNC) + int(FS * 0.1)
         bits = ""
 
-        for i in range(TOTAL_EXPECTED_BITS):
+        for _ in range(TOTAL_EXPECTED_BITS):
             win_start = curr_ptr - int(BIT_TOTAL_SAMPLES * 0.1)
             win_end = curr_ptr + int(BIT_TOTAL_SAMPLES * 1.1)
             if win_end > len(audio):
@@ -74,7 +76,11 @@ class SmartHomeController:
             c_up = correlate(seg, REF_UP, mode="valid")
             c_down = correlate(seg, REF_DOWN, mode="valid")
             bits += "1" if np.max(c_up) > np.max(c_down) else "0"
-            curr_ptr = win_start + (np.argmax(c_up) if np.max(c_up) > np.max(c_down) else np.argmax(c_down)) + BIT_TOTAL_SAMPLES
+            curr_ptr = (
+                win_start
+                + (np.argmax(c_up) if np.max(c_up) > np.max(c_down) else np.argmax(c_down))
+                + BIT_TOTAL_SAMPLES
+            )
 
         if len(bits) >= TOTAL_EXPECTED_BITS:
             decoded = ChirpProtocol.decode_from_bits(bits)
@@ -105,10 +111,7 @@ class SmartHomeController:
         self.is_listening = True
         try:
             with sd.InputStream(
-                samplerate=FS,
-                channels=1,
-                callback=self.audio_callback,
-                blocksize=int(FS * 0.1)
+                samplerate=FS, channels=1, callback=self.audio_callback, blocksize=int(FS * 0.1)
             ):
                 while self.is_listening:
                     sd.sleep(100)

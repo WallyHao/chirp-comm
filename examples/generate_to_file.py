@@ -8,12 +8,15 @@ Usage:
     python generate_to_file.py --noisy      # Generate noisy samples
     python generate_to_file.py --distorted  # Generate distorted samples
 """
-import os
+
 import argparse
+import os
+
 import numpy as np
 import scipy.io.wavfile as wav
-from chirp_comm.config import FS, SYNC_DUR, BIT_DUR, PAUSE
-from chirp_comm.dsp import REF_SYNC, REF_UP, REF_DOWN
+
+from chirp_comm.config import FS, PAUSE
+from chirp_comm.dsp import REF_DOWN, REF_SYNC, REF_UP
 from chirp_comm.protocol import ChirpProtocol
 
 SAMPLES_DIR = "samples"
@@ -23,11 +26,7 @@ def generate_clean_signal(text="ab", duration_before=0.5, duration_after=0.5):
     """Generate clean chirp signal"""
     bits = ChirpProtocol.encode_to_bits(text)
 
-    audio = [
-        np.zeros(int(FS * duration_before)),
-        REF_SYNC,
-        np.zeros(int(FS * 0.1))
-    ]
+    audio = [np.zeros(int(FS * duration_before)), REF_SYNC, np.zeros(int(FS * 0.1))]
 
     for bit in bits:
         audio.append(REF_UP if bit == "1" else REF_DOWN)
@@ -39,7 +38,7 @@ def generate_clean_signal(text="ab", duration_before=0.5, duration_after=0.5):
 
 def add_gaussian_noise(audio, snr_db=10):
     """Add Gaussian white noise"""
-    signal_power = np.mean(audio ** 2)
+    signal_power = np.mean(audio**2)
     noise_power = signal_power / (10 ** (snr_db / 10))
     noise = np.random.normal(0, np.sqrt(noise_power), len(audio))
     return audio + noise
@@ -47,7 +46,7 @@ def add_gaussian_noise(audio, snr_db=10):
 
 def add_pink_noise(audio, snr_db=10):
     """Add pink noise (1/f noise)"""
-    signal_power = np.mean(audio ** 2)
+    signal_power = np.mean(audio**2)
     noise_power = signal_power / (10 ** (snr_db / 10))
 
     # Generate pink noise: white noise through 1/f filter
@@ -61,7 +60,7 @@ def add_pink_noise(audio, snr_db=10):
 
 def add_hum(audio, snr_db=10, freq=50):
     """Add AC hum interference"""
-    signal_power = np.mean(audio ** 2)
+    signal_power = np.mean(audio**2)
     noise_power = signal_power / (10 ** (snr_db / 10))
 
     t = np.arange(len(audio)) / FS
@@ -108,9 +107,9 @@ def add_reverb(audio, decay=0.3, delay=0.1):
     result = audio.copy()
     delay_samples = int(delay * FS)
     for i in range(1, 4):
-        attenuated = audio.copy() * (decay ** i)
+        attenuated = audio.copy() * (decay**i)
         if delay_samples * i < len(result):
-            result[delay_samples * i:] += attenuated[:-delay_samples * i] * 0.5
+            result[delay_samples * i :] += attenuated[: -delay_samples * i] * 0.5
     return result
 
 
@@ -120,7 +119,7 @@ def add_clicks(audio, n_clicks=10):
     for _ in range(n_clicks):
         pos = np.random.randint(int(FS * 0.5), len(audio) - 100)
         click = np.exp(-np.arange(100) / 10) * np.random.uniform(-0.5, 0.5)
-        result[pos:pos + 100] += click
+        result[pos : pos + 100] += click
     return result
 
 
@@ -131,7 +130,7 @@ def generate_all_samples(text="ab"):
     # Clean signal
     clean = generate_clean_signal(text)
     wav.write(f"{SAMPLES_DIR}/01_clean.wav", FS, clean)
-    print(f"  [OK] 01_clean.wav - Clean signal")
+    print("  [OK] 01_clean.wav - Clean signal")
 
     # Different SNR Gaussian noise
     for snr in [20, 15, 10, 5]:
@@ -142,7 +141,7 @@ def generate_all_samples(text="ab"):
     # Pink noise
     pink = add_pink_noise(clean, snr_db=10)
     wav.write(f"{SAMPLES_DIR}/03_pink_noise.wav", FS, np.clip(pink, -1, 1))
-    print(f"  [OK] 03_pink_noise.wav - Pink noise")
+    print("  [OK] 03_pink_noise.wav - Pink noise")
 
     # AC hum
     for freq in [50, 100]:
@@ -153,41 +152,45 @@ def generate_all_samples(text="ab"):
     # Burst noise
     burst = add_burst_noise(clean, n_bursts=5)
     wav.write(f"{SAMPLES_DIR}/05_burst_noise.wav", FS, np.clip(burst, -1, 1))
-    print(f"  [OK] 05_burst_noise.wav - Burst noise")
+    print("  [OK] 05_burst_noise.wav - Burst noise")
 
     # Signal dropout
     dropout = add_dropout(clean, n_dropouts=2)
     wav.write(f"{SAMPLES_DIR}/06_dropout.wav", FS, dropout)
-    print(f"  [OK] 06_dropout.wav - Signal dropout")
+    print("  [OK] 06_dropout.wav - Signal dropout")
 
     # Volume attenuation
     for factor in [0.5, 0.3, 0.1]:
         vol = apply_volume(clean, factor)
-        wav.write(f"{SAMPLES_DIR}/07_volume_{int(factor*100)}.wav", FS, vol)
-        print(f"  [OK] 07_volume_{int(factor*100)}.wav - Volume {int(factor*100)}%")
+        wav.write(f"{SAMPLES_DIR}/07_volume_{int(factor * 100)}.wav", FS, vol)
+        print(f"  [OK] 07_volume_{int(factor * 100)}.wav - Volume {int(factor * 100)}%")
 
     # Doppler frequency shift
     for shift in [50, -50, 200]:
         doppler = apply_doppler_shift(clean, shift_hz=shift)
-        wav.write(f"{SAMPLES_DIR}/08_doppler_{'+' if shift>0 else ''}{shift}hz.wav", FS, np.clip(doppler, -1, 1))
-        print(f"  [OK] 08_doppler_{'+' if shift>0 else ''}{shift}hz.wav - Freq shift {shift}Hz")
+        wav.write(
+            f"{SAMPLES_DIR}/08_doppler_{'+' if shift > 0 else ''}{shift}hz.wav",
+            FS,
+            np.clip(doppler, -1, 1),
+        )
+        print(f"  [OK] 08_doppler_{'+' if shift > 0 else ''}{shift}hz.wav - Freq shift {shift}Hz")
 
     # Reverb
     reverb = add_reverb(clean, decay=0.3, delay=0.05)
     wav.write(f"{SAMPLES_DIR}/09_reverb.wav", FS, np.clip(reverb, -1, 1))
-    print(f"  [OK] 09_reverb.wav - Reverb effect")
+    print("  [OK] 09_reverb.wav - Reverb effect")
 
     # Impulse noise
     clicks = add_clicks(clean, n_clicks=10)
     wav.write(f"{SAMPLES_DIR}/10_clicks.wav", FS, np.clip(clicks, -1, 1))
-    print(f"  [OK] 10_clicks.wav - Impulse noise")
+    print("  [OK] 10_clicks.wav - Impulse noise")
 
     # Combined interference
     combined = add_gaussian_noise(clean, snr_db=15)
     combined = add_hum(combined, snr_db=20, freq=50)
     combined = add_burst_noise(combined, n_bursts=3)
     wav.write(f"{SAMPLES_DIR}/11_combined.wav", FS, np.clip(combined, -1, 1))
-    print(f"  [OK] 11_combined.wav - Combined interference")
+    print("  [OK] 11_combined.wav - Combined interference")
 
     print(f"\nAll samples saved to {SAMPLES_DIR}/")
     return SAMPLES_DIR

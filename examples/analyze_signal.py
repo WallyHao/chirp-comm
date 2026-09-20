@@ -6,13 +6,16 @@ Usage:
     python analyze_signal.py                    # Analyze all samples
     python analyze_signal.py samples/01_clean.wav  # Analyze specific file
 """
-import sys
+
 import os
+import sys
+
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import correlate
-from chirp_comm.config import FS, BIT_TOTAL_SAMPLES, TOTAL_EXPECTED_BITS
-from chirp_comm.dsp import REF_SYNC, REF_UP, REF_DOWN
+
+from chirp_comm.config import BIT_TOTAL_SAMPLES, FS, TOTAL_EXPECTED_BITS
+from chirp_comm.dsp import REF_DOWN, REF_SYNC, REF_UP
 from chirp_comm.protocol import ChirpProtocol
 
 
@@ -29,7 +32,7 @@ def analyze_signal(audio, filename="unknown"):
 
     results = {
         "filename": filename,
-        "rms": np.sqrt(np.mean(audio ** 2)),
+        "rms": np.sqrt(np.mean(audio**2)),
         "peak": np.max(np.abs(audio)),
         "sync_detected": False,
         "sync_peak": 0,
@@ -38,11 +41,11 @@ def analyze_signal(audio, filename="unknown"):
         "errors": 0,
         "error_rate": 0,
         "decoded": None,
-        "status": "N/A"
+        "status": "N/A",
     }
 
     # Detect sync
-    corr = correlate(audio, REF_SYNC, mode='valid')
+    corr = correlate(audio, REF_SYNC, mode="valid")
     if len(corr) > 0:
         results["sync_peak"] = np.max(corr)
         results["sync_position"] = np.argmax(corr) / FS
@@ -57,7 +60,7 @@ def analyze_signal(audio, filename="unknown"):
     curr_ptr = peak_idx + len(REF_SYNC) + int(FS * 0.1)
     bits = ""
 
-    for i in range(TOTAL_EXPECTED_BITS):
+    for _ in range(TOTAL_EXPECTED_BITS):
         win_start = curr_ptr - int(BIT_TOTAL_SAMPLES * 0.1)
         win_end = curr_ptr + int(BIT_TOTAL_SAMPLES * 1.1)
         if win_end > len(audio):
@@ -66,7 +69,11 @@ def analyze_signal(audio, filename="unknown"):
         c_up = correlate(seg, REF_UP, mode="valid")
         c_down = correlate(seg, REF_DOWN, mode="valid")
         bits += "1" if np.max(c_up) > np.max(c_down) else "0"
-        curr_ptr = win_start + (np.argmax(c_up) if np.max(c_up) > np.max(c_down) else np.argmax(c_down)) + BIT_TOTAL_SAMPLES
+        curr_ptr = (
+            win_start
+            + (np.argmax(c_up) if np.max(c_up) > np.max(c_down) else np.argmax(c_down))
+            + BIT_TOTAL_SAMPLES
+        )
 
     results["bits_extracted"] = len(bits)
 
@@ -85,7 +92,7 @@ def analyze_signal(audio, filename="unknown"):
                 results["status"] = "CRC_ERROR"
             else:
                 results["status"] = "DECODE_ERROR"
-        except:
+        except Exception:
             results["status"] = "DECODE_ERROR"
     else:
         results["status"] = "INSUFFICIENT_BITS"
@@ -97,11 +104,17 @@ def print_results(results):
     """Print analysis results"""
     print(f"\n{results['filename']}:")
     print(f"  RMS: {results['rms']:.4f}, Peak: {results['peak']:.4f}")
-    print(f"  Sync: {'OK' if results['sync_detected'] else 'FAIL'} (peak={results['sync_peak']:.1f} at {results['sync_position']:.3f}s)")
+    sync_state = "OK" if results["sync_detected"] else "FAIL"
+    print(
+        f"  Sync: {sync_state} (peak={results['sync_peak']:.1f} at {results['sync_position']:.3f}s)"
+    )
 
     if results["sync_detected"]:
         status_icon = "OK" if results["status"] == "OK" else "FAIL"
-        print(f"  Bits: {results['bits_extracted']}/{TOTAL_EXPECTED_BITS}, Errors: {results['errors']} ({results['error_rate']:.1f}%)")
+        print(
+            f"  Bits: {results['bits_extracted']}/{TOTAL_EXPECTED_BITS},"
+            f" Errors: {results['errors']} ({results['error_rate']:.1f}%)"
+        )
         print(f"  Decoded: '{results['decoded']}' [{status_icon}] {results['status']}")
 
 
@@ -111,7 +124,7 @@ def analyze_directory(dir_path):
         print(f"Directory not found: {dir_path}")
         return
 
-    files = sorted([f for f in os.listdir(dir_path) if f.endswith('.wav')])
+    files = sorted([f for f in os.listdir(dir_path) if f.endswith(".wav")])
 
     if not files:
         print(f"No wav files in directory: {dir_path}")
@@ -142,7 +155,7 @@ def analyze_directory(dir_path):
 
     print(f"  Total samples: {total}")
     print(f"  Sync detected: {sync_ok}/{total}")
-    print(f"  Decoded correctly: {ok}/{total} ({100*ok/total:.1f}%)")
+    print(f"  Decoded correctly: {ok}/{total} ({100 * ok / total:.1f}%)")
     print(f"  Average error rate: {avg_errors:.1f}%")
 
 

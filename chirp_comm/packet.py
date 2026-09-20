@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
+
 @dataclass
 class AcousticPacket:
     payload: str
@@ -9,4 +10,6 @@ class AcousticPacket:
     is_valid: bool = True
 
     def __repr__(self):
-        return f"<AcousticPacket payload='{self.payload}' rssi={self.rssi:.2f} valid={self.is_valid}>"
+        return (
+            f"<AcousticPacket payload='{self.payload}' rssi={self.rssi:.2f} valid={self.is_valid}>"
+        )
