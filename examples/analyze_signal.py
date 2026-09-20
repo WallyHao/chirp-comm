@@ -7,19 +7,19 @@ Usage:
     python analyze_signal.py samples/01_clean.wav  # Analyze specific file
 """
 
+import argparse
 import os
-import sys
 
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import correlate
 
-from chirp_comm.config import BIT_TOTAL_SAMPLES, FS, TOTAL_EXPECTED_BITS
+from chirp_comm.config import BIT_TOTAL_SAMPLES, DATA_LEN_CHARS, FS, TOTAL_EXPECTED_BITS
 from chirp_comm.dsp import REF_DOWN, REF_SYNC, REF_UP
 from chirp_comm.protocol import ChirpProtocol
 
 
-def analyze_signal(audio, filename="unknown"):
+def analyze_signal(audio, filename="unknown", expected="ab"):
     """Analyze chirp signal"""
     # Ensure audio is in range -1 to 1
     if audio.dtype == np.int16:
@@ -79,14 +79,14 @@ def analyze_signal(audio, filename="unknown"):
 
     # Calculate bit error rate
     if len(bits) >= TOTAL_EXPECTED_BITS:
-        expected_bits = ChirpProtocol.encode_to_bits("ab")
+        expected_bits = ChirpProtocol.encode_to_bits(expected)
         errors = sum(a != b for a, b in zip(bits, expected_bits))
         results["errors"] = errors
         results["error_rate"] = errors / len(expected_bits) * 100
 
         try:
             results["decoded"] = ChirpProtocol.decode_from_bits(bits)
-            if results["decoded"] == "ab":
+            if results["decoded"] == expected[:DATA_LEN_CHARS].ljust(DATA_LEN_CHARS, " "):
                 results["status"] = "OK"
             elif results["decoded"] == "!!!":
                 results["status"] = "CRC_ERROR"
@@ -118,7 +118,7 @@ def print_results(results):
         print(f"  Decoded: '{results['decoded']}' [{status_icon}] {results['status']}")
 
 
-def analyze_directory(dir_path):
+def analyze_directory(dir_path, expected="ab"):
     """Analyze all wav files in directory"""
     if not os.path.exists(dir_path):
         print(f"Directory not found: {dir_path}")
@@ -140,7 +140,7 @@ def analyze_directory(dir_path):
         _, audio = wavfile.read(filepath)
         if audio.ndim > 1:
             audio = audio[:, 0]
-        results = analyze_signal(audio, f)
+        results = analyze_signal(audio, f, expected=expected)
         print_results(results)
         all_results.append(results)
 
@@ -160,20 +160,21 @@ def analyze_directory(dir_path):
 
 
 def main():
-    if len(sys.argv) > 1:
-        target = sys.argv[1]
-        if os.path.isdir(target):
-            analyze_directory(target)
-        elif os.path.isfile(target):
-            _, audio = wavfile.read(target)
-            if audio.ndim > 1:
-                audio = audio[:, 0]
-            results = analyze_signal(audio, os.path.basename(target))
-            print_results(results)
-        else:
-            print(f"File not found: {target}")
+    parser = argparse.ArgumentParser(description="Analyze chirp signal samples")
+    parser.add_argument("target", nargs="?", default="samples", help="WAV file or directory")
+    parser.add_argument("--expected", "-e", default="ab", help="Transmitted text")
+    args = parser.parse_args()
+
+    if os.path.isdir(args.target):
+        analyze_directory(args.target, expected=args.expected)
+    elif os.path.isfile(args.target):
+        _, audio = wavfile.read(args.target)
+        if audio.ndim > 1:
+            audio = audio[:, 0]
+        results = analyze_signal(audio, os.path.basename(args.target), expected=args.expected)
+        print_results(results)
     else:
-        analyze_directory("samples")
+        print(f"File not found: {args.target}")
 
 
 if __name__ == "__main__":
