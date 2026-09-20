@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `_crc8` now computes a real CRC-8 (polynomial `0x07`, init `0x00`). It
+  previously returned the last eight data bits, so the frame check field
+  detected nothing.
+- The Doppler sample generator now time-scales the signal, which shifts every
+  frequency by the same factor, instead of ring modulating it with a sine.
+- The pink-noise generator now shapes white noise to a true `1/f` spectrum
+  instead of using a cumulative sum, which produced Brownian `1/f^2` noise.
+- The offline analyzer takes the transmitted text via `--expected` instead of
+  hardcoding `"ab"`.
+- All `samples/*.wav` files were regenerated to match the corrected CRC, using
+  seeded randomness and 16-bit PCM written with the standard library `wave`
+  module, which also removes the SciPy dependency from sample generation.
+
 ### Changed
 
 - `scipy` and `sounddevice` are now imported lazily, so the package imports and

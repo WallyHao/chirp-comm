@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
 [![Ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
-[![Tests](https://img.shields.io/badge/tests-148%20passing-brightgreen.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-155%20passing-brightgreen.svg)](tests)
 
 **Send short text between devices using nothing but a speaker and a microphone.**
 
