@@ -5,12 +5,13 @@ from .dsp import hamming_74_decode, hamming_74_encode
 class ChirpProtocol:
     @staticmethod
     def _crc8(data_bits):
-        """计算 8 位数据的 CRC-8 校验"""
+        """CRC-8 (polynomial 0x07, init 0x00) over a bit string, MSB first."""
         crc = 0
         for bit in data_bits:
-            crc = ((crc << 1) | int(bit)) & 0xFF
-            if crc & 0x100:
-                crc ^= 0x07
+            if ((crc >> 7) & 1) ^ int(bit):
+                crc = ((crc << 1) ^ 0x07) & 0xFF
+            else:
+                crc = (crc << 1) & 0xFF
         return format(crc, "08b")
 
     @staticmethod
@@ -54,19 +55,15 @@ class ChirpProtocol:
         data_encoded = bit_stream[:-14]
         crc_encoded = bit_stream[-14:]
 
-        # 移除奇偶校验并解码 Hamming
+        # Remove the per-block parity bit and Hamming-decode. The parity bit is
+        # kept for framing compatibility; Hamming(7,4) already corrects a
+        # single-bit error per codeword and the trailing CRC guards the frame.
         raw_bits = ""
         i = 0
         while i < len(data_encoded):
             if i + 8 <= len(data_encoded):
                 block = data_encoded[i : i + 7]
-                parity = data_encoded[i + 7]
-                block_parity = str(sum(int(b) for b in block) % 2)
-
-                if parity == block_parity:
-                    raw_bits += hamming_74_decode(block)
-                else:
-                    raw_bits += hamming_74_decode(block)
+                raw_bits += hamming_74_decode(block)
             i += 8
 
         # 解码 CRC
