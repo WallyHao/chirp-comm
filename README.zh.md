@@ -25,7 +25,7 @@
 ## 安装
 
 ```bash
-git clone https://github.com/waliwuao/chirp_comm.git
+git clone https://github.com/WallyHao/chirp-comm.git
 cd chirp_comm
 pip install -r requirements.txt
 pip install -e .
